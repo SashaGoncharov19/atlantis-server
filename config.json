@@ -1,0 +1,9 @@
+{
+  "DB": {
+    "host": "IP",
+    "user": "root",
+    "password": "STRONGPASSWORD",
+    "database": "DB"
+  },
+  "port": 3001
+}
