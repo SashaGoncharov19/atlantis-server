@@ -1,10 +1,16 @@
 console.clear();
-require('dotenv').config()
 
-const config = require('../config.json');
+const config = require('./config.json');
 const color = require('colors');
 
+let info = color.blue(`[INFO] `);
+let success = color.green(`[INFO] `);
+let warn = color.yellow(`[WARN] `);
+let error = color.red(`[ERROR] `);
+
 //MySQL section
+
+let connected = false;
 
 const mysql = require('mysql');
 const DB = mysql.createPool({
@@ -14,12 +20,24 @@ const DB = mysql.createPool({
     database: config.DB.database
 });
 
-DB.getConnection(function (err, connection) {
-    if (err) return console.log(color.red(`[DB] Connect error. ${err}`));
-    connection.query(`SELECT 1 + 1 AS solution`, function (e, res) {
-        if (e) return console.log(color.red(`[DB] Wrong DB. ${e}`));
-    });
+const spareDB = mysql.createPool({
+    host: config.DB.host,
+    user: config.DB.user,
+    password: config.DB.password
+})
+
+DB.getConnection((err, connection) => {
+    if (err) {
+        if (err.sqlMessage === `Unknown database '${config.DB.database}'`) {
+            console.log(warn + 'DB not found. Creating database..')
+            createDB();
+        } else {
+            if (err) return console.log(color.red(`[DB] Connect error. ${err}`));
+            return ;
+        }
+    }
     console.log(color.green(`[DB] Connected successful.`))
+    connected = true;
 })
 
 //MySQL section end
@@ -52,7 +70,7 @@ app.get('/api/fullOnline', (req, res) => {
     DB.query(`SELECT * FROM server_data`, function (error, result) {
         let online = 0;
         for (var i = 0; i < result.length; i++) {
-            online = online + result[i].online;
+            online = online + Number(result[i].online);
         }
         res.send(`${online}`)
     })
@@ -69,27 +87,18 @@ app.listen(config.port,function (req, res) {
 //System
 
 const axios = require('axios');
+const e = require("express");
 
-system();
-setInterval(system, 30000);
+setTimeout(() => {
+    if (connected) {
+        system();
+        setInterval(system, 30000);
+    } else {
+        console.log(error + `System stopped. DB not connected`);
+    }
+}, 5000)
 
 function system () {
-    // setInterval(() => {
-    //     axios.get('https://cdn.rage.mp/master/').then((response) => {
-    //         DB.query('SELECT * FROM server_data', function (err, res) {
-    //             if (res) {
-    //                 let data = response.data;
-    //                 for (var i = 0; i < res.length; i++) {
-    //                     let serverInfo = data[res[i].ip + ':' + res[i].port];
-    //                     DB.query("UPDATE server_data SET online = ? WHERE ip = ?", [serverInfo.players, res[i].ip]);
-    //                 }
-    //             } else {
-    //                 console.log(`Error 15. Insert server ip and port into DB.`)
-    //             }
-    //         })
-    //     })
-    // }, 30000)
-
     axios.get(('https://api.altv.mp/servers/list')).then((response) => {
         let data = response.data;
         DB.query(`SELECT * FROM server_data`, function (err, res) {
@@ -107,5 +116,68 @@ function system () {
                 console.log(`[WARN] Add server on DB.`)
             }
         })
+    })
+}
+
+function createDB () {
+    spareDB.query(`CREATE DATABASE ${config.DB.database}`, (error0, result0) => {
+        if (result0) {
+            console.log(info + `DB ${config.DB.database} created.`);
+            spareDB.query(`USE ${config.DB.database}`, (error1, result1) => {
+                if (result1) {
+                    console.log(info + `Using ${config.DB.database} DB.`);
+                    DB.query(`
+                            CREATE TABLE server_data (
+                                id int(11) NOT NULL,
+                                name varchar(255) CHARACTER SET utf8 NOT NULL,
+                                online varchar(255) CHARACTER SET utf8 NOT NULL,
+                                ip varchar(255) CHARACTER SET utf8 NOT NULL,
+                                port int(255) NOT NULL
+                            ) ENGINE=InnoDB;
+                            `, (error2, result2) => {
+                        if (result2) {
+                            DB.query(`
+                                    ALTER TABLE server_data
+                                    ADD PRIMARY KEY (id);
+                                `);
+                            DB.query(`
+                                    ALTER TABLE server_data
+                                    MODIFY id int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+                                    COMMIT;
+                                `);
+                            console.log(info + `Column server_data created.`)
+                            DB.query(`
+                                    CREATE TABLE posts (
+                                        id int(11) NOT NULL,
+                                        img varchar(255) CHARACTER SET utf8 NOT NULL,
+                                        name varchar(255) CHARACTER SET utf8 NOT NULL
+                                      ) ENGINE=InnoDB;
+                                `, (error3, result3) => {
+                                if (result3) {
+                                    DB.query(`
+                                        ALTER TABLE posts
+                                        ADD PRIMARY KEY (id);
+                                    `);
+                                    DB.query(`
+                                        ALTER TABLE posts
+                                        MODIFY id int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+                                    `);
+                                    console.log(info + 'Column posts created.')
+                                    console.log(success + 'DB created successful!');
+                                } else {
+                                    console.log(error3);
+                                }
+                            })
+                        } else {
+                            console.log(error2)
+                        }
+                    })
+                } else {
+                    console.log(error1);
+                }
+            })
+        } else {
+            console.log(error0);
+        }
     })
 }

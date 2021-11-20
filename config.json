@@ -1,9 +1,9 @@
 {
   "DB": {
-    "host": "IP",
+    "host": "localhost",
     "user": "root",
-    "password": "STRONGPASSWORD",
-    "database": "DB"
+    "password": "usbw",
+    "database": "atlantis"
   },
   "port": 3001
 }
